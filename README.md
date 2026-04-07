@@ -1,4 +1,4 @@
-# Shorvid Generator
+# Snippy Generator
 
 **A highly customizable short-form (brainrot) video generator.**  
 Create dynamic, meme-style videos with your own characters, background music, voices, fonts, and even auto-generated, context-relevant images.
