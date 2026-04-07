@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <title>Snippy - Dialogue</title>
+</head>
+<body>
+
+    <nav class="navbar">
+        <a href="/" class="navbar-brand">Snip<span>py</span></a>
+        <div class="nav-links">
+            <a href="{{ url_for('monologue_generator') }}">Monologue</a>
+            <a href="{{ url_for('dialogue_generator') }}" class="active">Dialogue</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="page-header">
+            <h1>Dialogue Generator</h1>
+            <p>Generate short-form videos with two characters talking to each other.</p>
+        </div>
+
+
+        <form method="POST">
+            <!-- Characters & Script -->
+            <div class="card">
+                <div class="card-title">Content</div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>First Character</label>
+                        <select name="character_1" id="character_1">
+                            {% for char in characters %}
+                                <option value="{{ char }}" {% if char == 'Rem' %}selected{% endif %}>{{ char }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Second Character</label>
+                        <select name="character_2" id="character_2">
+                            {% for char in characters %}
+                                <option value="{{ char }}" {% if char == 'Subaru' %}selected{% endif %}>{{ char }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="card-title" style="margin-top: 0.5rem;">Script Source</div>
+                <div class="tts-toggle">
+                    <input type="radio" name="script_source" id="script-write" value="write" checked>
+                    <label for="script-write">Write Manually</label>
+                    <input type="radio" name="script_source" id="script-generate" value="generate">
+                    <label for="script-generate">Generate with AI</label>
+                </div>
+
+                <div id="ai-script-fields" class="elevenlabs-fields">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>AI Provider</label>
+                            <select id="script-provider">
+                                <option value="openai">OpenAI (GPT)</option>
+                                <option value="gemini">Google Gemini</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>API Key</label>
+                            <input type="text" id="script-api-key" placeholder="Your API key">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Topic / Prompt</label>
+                        <input type="text" id="script-prompt" placeholder="e.g. Debate about pineapple on pizza">
+                    </div>
+                    <button type="button" id="generate-script-btn" class="btn btn-secondary" onclick="generateScript()">Generate Script</button>
+                </div>
+
+                <div class="form-group" style="margin-top: 1rem;">
+                    <label>Script</label>
+                    <textarea class="script-textarea" name="script" id="script-textarea" placeholder="Write dialogue script...">Rem:
+So, this is how it works?
+
+Subaru:
+Yep, you just type text like this and boom! it works!
+
+Rem:
+Hah, who knew this would be this easy!</textarea>
+                </div>
+            </div>
+
+            <!-- TTS Settings -->
+            <div class="card">
+                <div class="card-title">Text-to-Speech</div>
+                <div class="tts-toggle">
+                    <input type="radio" name="tts_model" id="tts-edge" value="edge-tts" checked>
+                    <label for="tts-edge">Edge TTS (Free)</label>
+                    <input type="radio" name="tts_model" id="tts-eleven" value="eleven-labs">
+                    <label for="tts-eleven">ElevenLabs (Premium)</label>
+                </div>
+                <div class="elevenlabs-fields" id="elevenlabs-fields">
+                    <div class="form-group">
+                        <label>ElevenLabs API Key</label>
+                        <input type="text" name="elevenlabs_api_key" placeholder="sk-...">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Voice ID (Character 1)</label>
+                            <input type="text" name="voice_id_1" placeholder="e.g. Xb7hH8MSUJpSbSDYk0k2">
+                        </div>
+                        <div class="form-group">
+                            <label>Voice ID (Character 2)</label>
+                            <input type="text" name="voice_id_2" placeholder="e.g. pNInz6obpgDQGcFmaJgB">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Media -->
+            <div class="card">
+                <div class="card-title">Media</div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Background Music</label>
+                        <select name="music">
+                            <option value="no-music">No Music</option>
+                            {% for music in music_files %}
+                                <option value="{{ music }}">{{ music }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Background Video</label>
+                        <select name="background">
+                            {% for bg in background_files %}
+                                <option value="{{ bg }}">{{ bg }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="checkbox-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="display_character">
+                        Display Characters
+                    </label>
+                </div>
+            </div>
+
+            <button type="button" class="btn btn-primary" onclick="startGeneration()">Generate Video</button>
+        </form>
+
+        <!-- Generated Videos -->
+        <div style="margin-top: 2.5rem;">
+            <div class="video-grid-header">
+                <h2>Generated Videos</h2>
+                <span class="count">{{ videos_path|length }}</span>
+            </div>
+
+            {% if videos_path %}
+            <div class="video-grid">
+                {% for video_path in videos_path %}
+                <a href="{{ url_for('video_detail', video_path=video_path) }}" class="video-card">
+                    <video src="{{ url_for('static', filename='temp/videos/' + video_path) }}" muted preload="metadata"></video>
+                    <div class="video-card-overlay">{{ video_path }}</div>
+                </a>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+                </svg>
+                <p>No videos generated yet</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% include 'progress_modal.html' %}
+
+    <script>
+        document.querySelectorAll('input[name="tts_model"]').forEach(radio => {
+            radio.addEventListener('change', () => {
+                document.getElementById('elevenlabs-fields').classList.toggle('visible', radio.value === 'eleven-labs' && radio.checked);
+            });
+        });
+
+        document.querySelectorAll('input[name="script_source"]').forEach(radio => {
+            radio.addEventListener('change', () => {
+                document.getElementById('ai-script-fields').classList.toggle('visible', radio.value === 'generate' && radio.checked);
+            });
+        });
+
+        async function generateScript() {
+            const btn = document.getElementById('generate-script-btn');
+            const provider = document.getElementById('script-provider').value;
+            const apiKey = document.getElementById('script-api-key').value.trim();
+            const prompt = document.getElementById('script-prompt').value.trim();
+            const char1 = document.getElementById('character_1').value.trim();
+            const char2 = document.getElementById('character_2').value.trim();
+
+            if (!apiKey || !prompt) {
+                alert('Please provide both an API key and a topic/prompt.');
+                return;
+            }
+
+            btn.textContent = 'Generating...';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch('/api/generate_script', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        provider, api_key: apiKey, prompt,
+                        gen_type: 'dialogue', char_name1: char1, char_name2: char2,
+                    }),
+                });
+                const data = await res.json();
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                } else {
+                    document.getElementById('script-textarea').value = data.script;
+                }
+            } catch (e) {
+                alert('Request failed: ' + e.message);
+            } finally {
+                btn.textContent = 'Generate Script';
+                btn.disabled = false;
+            }
+        }
+
+        async function startGeneration() {
+            const script = document.getElementById('script-textarea').value.trim();
+            if (!script) { alert('Please write or generate a script first.'); return; }
+
+            const form = document.querySelector('form');
+            const body = {
+                script: script,
+                character_1: form.querySelector('[name="character_1"]').value,
+                character_2: form.querySelector('[name="character_2"]').value,
+                music: form.querySelector('[name="music"]').value,
+                background: form.querySelector('[name="background"]').value,
+                display_character: form.querySelector('[name="display_character"]')?.checked || false,
+                tts_model: form.querySelector('[name="tts_model"]:checked')?.value || 'edge-tts',
+                elevenlabs_api_key: form.querySelector('[name="elevenlabs_api_key"]')?.value || '',
+                voice_id_1: form.querySelector('[name="voice_id_1"]')?.value || '',
+                voice_id_2: form.querySelector('[name="voice_id_2"]')?.value || '',
+            };
+
+            showProgress('dialogue');
+
+            try {
+                const res = await fetch('/api/generate/dialogue', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                const data = await res.json();
+                if (data.error) {
+                    document.getElementById('progress-spinner').style.display = 'none';
+                    document.getElementById('progress-footer').innerHTML =
+                        '<div class="progress-error-msg">' + data.error + '</div>';
+                    return;
+                }
+                listenToProgress(data.job_id);
+            } catch (e) {
+                document.getElementById('progress-spinner').style.display = 'none';
+                document.getElementById('progress-footer').innerHTML =
+                    '<div class="progress-error-msg">Failed to start: ' + e.message + '</div>';
+            }
+        }
+    </script>
+
+</body>
+</html>

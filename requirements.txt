@@ -1,0 +1,12 @@
+flask
+moviepy
+Pillow
+httpx
+PyYAML
+groq
+spacy>=3.8.7
+pydub
+audioop-lts
+edge_tts
+elevenlabs
+openai-whisper

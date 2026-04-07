@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <title>Snippy - Publish</title>
+</head>
+<body>
+
+    <nav class="navbar">
+        <a href="/" class="navbar-brand">Snip<span>py</span></a>
+        <div class="nav-links">
+            <a href="{{ url_for('monologue_generator') }}">Monologue</a>
+            <a href="{{ url_for('dialogue_generator') }}">Dialogue</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="page-header">
+            <h1>Publish Video</h1>
+            <p>Upload to YouTube via upload-post, or remove this video.</p>
+        </div>
+
+        <div class="publish-layout">
+            <video src="{{ url_for('static', filename='temp/videos/' + video_path) }}" controls></video>
+
+            <div>
+                <!-- AI Auto-generate -->
+                <div class="card">
+                    <div class="card-title">Auto-Generate Metadata (Optional)</div>
+                    <p style="font-size: 0.8rem; color: #71717a; margin-bottom: 1rem;">
+                        Provide an AI API key to auto-fill title, description, and tags from the script.
+                    </p>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>AI Provider</label>
+                            <select id="meta-provider">
+                                <option value="openai">OpenAI (GPT)</option>
+                                <option value="gemini">Google Gemini</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>API Key</label>
+                            <input type="text" id="meta-api-key" placeholder="Your API key">
+                        </div>
+                    </div>
+                    <button type="button" id="autogen-btn" class="btn btn-secondary" onclick="autoGenerate()">Auto-Generate</button>
+                </div>
+
+                <!-- Publish Form -->
+                <div class="card">
+                    <div class="card-title">Upload to YouTube</div>
+                    <div class="form-group">
+                        <label>Upload-Post API Key</label>
+                        <input type="text" id="upload-api-key" placeholder="Your upload-post.com API key">
+                    </div>
+                    <div class="form-group">
+                        <label>User</label>
+                        <input type="text" id="upload-user" placeholder="Your upload-post username">
+                    </div>
+                    <div class="form-group">
+                        <label>Title</label>
+                        <input type="text" id="upload-title" placeholder="Video title">
+                    </div>
+                    <div class="form-group">
+                        <label>Description</label>
+                        <textarea id="upload-description" placeholder="Video description" style="min-height: 80px;"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Tags</label>
+                        <input type="text" id="upload-tags" placeholder="tag1 tag2 tag3">
+                    </div>
+
+                    <div id="publish-status" style="display: none; margin-bottom: 1rem;"></div>
+
+                    <div class="btn-group">
+                        <button type="button" id="publish-btn" class="btn btn-primary" onclick="publishVideo()">Publish to YouTube</button>
+                        <form method="POST" style="display: inline;">
+                            <button type="submit" name="remove" class="btn btn-danger">Remove Video</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const videoPath = "{{ video_path }}";
+
+        async function autoGenerate() {
+            const btn = document.getElementById('autogen-btn');
+            const provider = document.getElementById('meta-provider').value;
+            const apiKey = document.getElementById('meta-api-key').value.trim();
+
+            if (!apiKey) {
+                alert('Please provide an API key.');
+                return;
+            }
+
+            // Read script from the temp file (it's saved during generation)
+            let scriptText = '';
+            try {
+                const res = await fetch('/static/temp/text.txt');
+                scriptText = await res.text();
+            } catch (e) {
+                alert('Could not read script. Generate a video first.');
+                return;
+            }
+
+            btn.textContent = 'Generating...';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch('/api/generate_metadata', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ script: scriptText, provider, api_key: apiKey }),
+                });
+                const data = await res.json();
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                } else {
+                    if (data.title) document.getElementById('upload-title').value = data.title;
+                    if (data.description) document.getElementById('upload-description').value = data.description;
+                    if (data.tags) document.getElementById('upload-tags').value = data.tags;
+                }
+            } catch (e) {
+                alert('Request failed: ' + e.message);
+            } finally {
+                btn.textContent = 'Auto-Generate';
+                btn.disabled = false;
+            }
+        }
+
+        async function publishVideo() {
+            const btn = document.getElementById('publish-btn');
+            const statusEl = document.getElementById('publish-status');
+            const apiKey = document.getElementById('upload-api-key').value.trim();
+            const user = document.getElementById('upload-user').value.trim();
+            const title = document.getElementById('upload-title').value.trim();
+            const description = document.getElementById('upload-description').value.trim();
+            const tags = document.getElementById('upload-tags').value.trim();
+
+            if (!apiKey || !user || !title) {
+                alert('API key, user, and title are required.');
+                return;
+            }
+
+            btn.textContent = 'Publishing...';
+            btn.disabled = true;
+            statusEl.style.display = 'none';
+
+            const formData = new FormData();
+            formData.append('upload_api_key', apiKey);
+            formData.append('user', user);
+            formData.append('title', title);
+            formData.append('description', description);
+            formData.append('tags', tags);
+            formData.append('video_path', videoPath);
+
+            try {
+                const res = await fetch('/api/publish', {
+                    method: 'POST',
+                    body: formData,
+                });
+                const data = await res.json();
+                statusEl.style.display = 'block';
+                if (data.error) {
+                    statusEl.innerHTML = '<div class="callout callout-warn"><span class="callout-icon">!</span><div>' + data.error + '</div></div>';
+                } else {
+                    statusEl.innerHTML = '<div class="callout" style="background: rgba(34,197,94,0.08); border: 1px solid rgba(34,197,94,0.2); color: #86efac;"><span class="callout-icon">&#10003;</span><div>Video published successfully!</div></div>';
+                }
+            } catch (e) {
+                statusEl.style.display = 'block';
+                statusEl.innerHTML = '<div class="callout callout-warn"><span class="callout-icon">!</span><div>Request failed: ' + e.message + '</div></div>';
+            } finally {
+                btn.textContent = 'Publish to YouTube';
+                btn.disabled = false;
+            }
+        }
+    </script>
+
+</body>
+</html>

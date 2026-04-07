@@ -1,0 +1,133 @@
+<!-- Progress Overlay -->
+<div class="progress-overlay" id="progress-overlay">
+    <div class="progress-modal">
+        <h2 id="progress-title">Generating Video</h2>
+        <div class="progress-steps" id="progress-steps"></div>
+        <div class="progress-spinner" id="progress-spinner"></div>
+        <div id="progress-footer"></div>
+    </div>
+</div>
+
+<script>
+    const STEPS_ORDER = [
+        "Generating speech from script...",
+        "Transcribing audio...",
+        "Creating subtitles...",
+        "Compositing & rendering video...",
+        "Done!",
+    ];
+
+    const STEPS_ORDER_DIALOGUE = [
+        "Generating speech for dialogue lines...",
+        "Transcribing audio...",
+        "Creating subtitles...",
+        "Compositing & rendering video...",
+        "Done!",
+    ];
+
+    let currentSteps = STEPS_ORDER;
+    let completedSteps = [];
+    let currentStep = null;
+
+    function matchStep(serverStep) {
+        // Match server message to our predefined step list (fuzzy prefix match)
+        for (const step of currentSteps) {
+            if (serverStep.startsWith(step.substring(0, 15))) return step;
+        }
+        return serverStep;
+    }
+
+    function renderSteps() {
+        const container = document.getElementById('progress-steps');
+        container.innerHTML = '';
+
+        currentSteps.forEach((step, i) => {
+            const isDone = completedSteps.includes(step);
+            const isActive = step === currentStep && !isDone;
+            const stepEl = document.createElement('div');
+            stepEl.className = 'progress-step' + (isDone ? ' done' : '');
+
+            let iconClass = 'pending';
+            let iconContent = i + 1;
+            if (isDone) { iconClass = 'done'; iconContent = '&#10003;'; }
+            else if (isActive) { iconClass = 'active'; }
+
+            let labelClass = iconClass;
+
+            stepEl.innerHTML = `
+                <div class="step-icon ${iconClass}">${iconContent}</div>
+                <div class="step-label ${labelClass}">${step}</div>
+            `;
+            container.appendChild(stepEl);
+        });
+    }
+
+    function showProgress(genType) {
+        currentSteps = genType === 'dialogue' ? STEPS_ORDER_DIALOGUE : STEPS_ORDER;
+        completedSteps = [];
+        currentStep = null;
+        document.getElementById('progress-overlay').classList.add('active');
+        document.getElementById('progress-spinner').style.display = 'block';
+        document.getElementById('progress-footer').innerHTML = '';
+        renderSteps();
+    }
+
+    function hideProgress() {
+        document.getElementById('progress-overlay').classList.remove('active');
+    }
+
+    function listenToProgress(jobId) {
+        const evtSource = new EventSource('/api/progress/' + jobId);
+
+        evtSource.onmessage = function(e) {
+            const data = JSON.parse(e.data);
+            const step = matchStep(data.step);
+
+            if (data.status === 'completed') {
+                // Mark current as done, mark "Done!" as done
+                if (currentStep) completedSteps.push(currentStep);
+                const doneStep = currentSteps[currentSteps.length - 1];
+                completedSteps.push(doneStep);
+                currentStep = null;
+                document.getElementById('progress-spinner').style.display = 'none';
+                document.getElementById('progress-footer').innerHTML =
+                    '<div class="progress-done-msg">Video generated successfully! Reloading...</div>';
+                renderSteps();
+                evtSource.close();
+                setTimeout(() => location.reload(), 1500);
+                return;
+            }
+
+            if (data.status === 'error') {
+                if (currentStep) completedSteps.push(currentStep);
+                currentStep = null;
+                document.getElementById('progress-spinner').style.display = 'none';
+                document.getElementById('progress-footer').innerHTML =
+                    '<div class="progress-error-msg">' + data.step + '</div>';
+
+                // Mark remaining steps as error
+                const container = document.getElementById('progress-steps');
+                const stepEls = container.querySelectorAll('.progress-step');
+                stepEls.forEach((el, i) => {
+                    if (!completedSteps.includes(currentSteps[i])) {
+                        el.querySelector('.step-icon').className = 'step-icon error';
+                        el.querySelector('.step-label').className = 'step-label error';
+                    }
+                });
+                evtSource.close();
+                return;
+            }
+
+            // New step started — mark previous as done
+            if (currentStep && currentStep !== step) {
+                completedSteps.push(currentStep);
+            }
+            currentStep = step;
+            renderSteps();
+        };
+
+        evtSource.onerror = function() {
+            evtSource.close();
+        };
+    }
+</script>
